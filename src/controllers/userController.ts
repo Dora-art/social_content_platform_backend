@@ -1,83 +1,75 @@
+import { Request, Response, NextFunction } from "express";
+import { UserService } from "../services/userService";
 import {
-  signupUser,
-  loginUser,
   UserSignupData,
-  getUserByEmail,
-  updateUserInfo,
-  deleteUser,
+  UserLoginData,
+  updateUserData,
 } from "../services/userService";
-import { Request, Response } from "express";
 
-export async function registerUser(req: Request, res: Response) {
-  try {
-    const result = await signupUser(req.body as UserSignupData);
-    res.status(200).json({
-      message: "User successfully created",
-      token: result.token,
-      user: result,
-    });
-  } catch (err: unknown) {
-    if (err instanceof Error) {
-      if (
-        err.message === "Invalid request body" ||
-        err.message === "User already exists"
-      ) {
-        res.status(400).json({ message: err.message });
-      } else {
-        console.error(err);
-        res
-          .status(500)
-          .json({ message: "Internal server error", error: err.message });
-      }
-    } else {
-      console.error("Unexpected error type:", err);
-      res
-        .status(500)
-        .json({ message: "Internal server error", error: "Unexpected error" });
+const userService = new UserService();
+
+export class UserController {
+  async registerUser(req: Request, res: Response, next: NextFunction) {
+    try {
+      const result = await userService.signupUser(req.body as UserSignupData);
+      res.status(200).json({
+        message: "User successfully created",
+        token: result.token,
+        user: result,
+      });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  async login(req: Request, res: Response, next: NextFunction) {
+    try {
+      const user = await userService.loginUser(req.body as UserLoginData);
+      res.json(user);
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  async getUser(req: Request, res: Response, next: NextFunction) {
+    try {
+      const user = await userService.getUser(req.params.id);
+      res.status(200).json(user);
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  async getAllUsers(req: Request, res: Response, next: NextFunction) {
+    try {
+      const users = await userService.getAllUsers();
+      res.status(200).json(users);
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  async updateUser(req: Request, res: Response, next: NextFunction) {
+    try {
+      const user = await userService.updateUserInfo(
+        req.params.id,
+        req.body as updateUserData
+      );
+      res.json(user);
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  async deleteUser(req: Request, res: Response, next: NextFunction) {
+    try {
+      const result = await userService.deleteUser(req.params.id);
+      res.json(result);
+    } catch (err) {
+      next(err);
     }
   }
 }
 
-export async function login(req: Request, res: Response) {
-  try {
-    const user = await loginUser(req.body);
-    res.json(user);
-  } catch (err: unknown) {
-    if (err instanceof Error) {
-      res.status(401).json({ error: err.message });
-    }
-  }
-}
-
-export async function getUser(req: Request, res: Response) {
-  try {
-    const user = await getUserByEmail(req.params.email);
-    res.json(user);
-  } catch (err: unknown) {
-    if (err instanceof Error) {
-      res.status(404).json({ error: err.message });
-    }
-  }
-}
-
-export async function updateUser(req: Request, res: Response) {
-  try {
-    const user = await updateUserInfo(req.body, req.params.email);
-    res.json(user);
-  } catch (err: unknown) {
-    if (err instanceof Error) {
-      res.status(400).json({ error: err.message });
-    }
-  }
-}
-
-export async function deleteUserInfo(req: Request, res: Response) {
-  try {
-    await deleteUser(req.params.email);
-    res.json({ message: "User deleted successfully" });
-  } catch (err: unknown) {
-    if (err instanceof Error) {
-      res.status(404).json({ error: err.message });
-    }
-  }
-}
+const userController = new UserController();
+export { userController };

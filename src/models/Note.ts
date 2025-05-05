@@ -1,14 +1,19 @@
 import mongoose, { Types, Schema, Document } from "mongoose";
-interface NoteDocument extends Document {
+export interface NoteDocument extends Document {
+  
   title: string;
-  img: string;
+  imgUrl?: string;
   content: string;
   author: Types.ObjectId;
+  status: "draft" | "pending" | "published" | "rejected";
   likes: Types.ObjectId[];
   saves: Types.ObjectId[];
   category: Types.ObjectId[];
   createdAt: Date;
   updateAt: Date;
+  rejectionReason: string,
+  tags: string,
+  publishedAt: Date
 }
 
 const noteSchema: Schema<NoteDocument> = new Schema(
@@ -17,8 +22,9 @@ const noteSchema: Schema<NoteDocument> = new Schema(
       type: String,
       required: true,
     },
-    img: {
+    imgUrl: {
       type: String,
+      required: false
     },
     content: {
       type: String,
@@ -27,10 +33,15 @@ const noteSchema: Schema<NoteDocument> = new Schema(
     author: [
       {
         type: mongoose.Schema.Types.ObjectId,
-        ref: "User",
-        required: true,
+          required: true,
       },
     ],
+    status:{
+type: String,
+enum: ["draft", "pending", "published", "rejected"],
+default: "draft",
+required: true,
+    },
     category: [
       {
         type: mongoose.Schema.Types.ObjectId,
@@ -50,6 +61,18 @@ const noteSchema: Schema<NoteDocument> = new Schema(
         ref: "User",
         default: [],
       }],
+      rejectionReason: {
+        type: String,
+        required: false
+      },
+      tags: [{type:String,
+        required:true
+      }],
+      
+      publishedAt: {
+        type: Date,
+        required: true
+      }
   },
   { timestamps: true }
 );
