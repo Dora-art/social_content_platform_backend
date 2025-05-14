@@ -1,17 +1,18 @@
 import mongoose from "mongoose";
-import { Schema, Types, Document } from "mongoose";
+import { Schema,Document, Types } from "mongoose";
 
 export interface UserDocument extends Document {
+    _id: mongoose.Types.ObjectId,
     username: string,
     email: string,
     password: string,
     createdAt: Date,
-    updateAt: Date,
-    blogs: Types.ObjectId[],
+    updateAt: Date,              
+    notes: Types.ObjectId[],
     token?: string,
 }
 
-const userSChema: Schema<UserDocument>  = new Schema({
+const UserSchema: Schema<UserDocument>  = new Schema({
     username: {
 type: String,
 required: true,
@@ -26,12 +27,12 @@ password: {
     required: true,
     minlength: 6,
 },
-blogs: [{ type: mongoose.Schema.Types.ObjectId, ref: "Blog", required:true}],
+notes: [{ type: mongoose.Schema.Types.ObjectId, ref: "Notes", required:true}],
 token: {type: String}
     
 }, 
 {timestamps: true})
 
-const User = mongoose.model<UserDocument>("User", userSChema)
+const User = mongoose.model<UserDocument>("User", UserSchema)
 
 export default User;

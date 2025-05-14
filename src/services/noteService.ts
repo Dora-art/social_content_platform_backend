@@ -2,49 +2,50 @@ import mongoose, { Types } from "mongoose";
 import { NoteDocument } from "../models/Note";
 import Note from "../models/Note";
 import { z } from "zod";
-import { BadRequestError, InternalServerError, NotFoundError } from "../utils/error";
+import {
+  BadRequestError,
+  InternalServerError,
+  NotFoundError,
+} from "../utils/error";
+import { AuthorDocument } from "../models/Author";
+
 
 const noteSchema = z.object({
   title: z.string().min(1, "Title is rquired").max(255),
   content: z.string().min(1, "Content is required"),
-  authorId: z
-    .string()
-    .refine((id) => mongoose.Types.ObjectId.isValid(id), {
-      message: "Invalid author ID",
-    }),
-  categoryIds: z.array(
-    z
-      .string()
-      .refine((id) => mongoose.Types.ObjectId.isValid(id), {
-        message: "Invalid category ID",
-      })
-  ),
   imgUrl: z.string().url().optional(),
+   categoryIds: z.array(
+    z.string().refine((id) => mongoose.Types.ObjectId.isValid(id), {
+      message: "Invalid category ID",
+    })
+  ).optional(),
   tags: z.array(z.string()).optional(),
 });
 
 const updateSchema = z.object({
   title: z.string().min(1, "Title is rquired").max(255).optional(),
   content: z.string().min(1, "Content is required").optional(),
-  categoryIds: z.array(
-    z
-      .string()
-      .refine((id) => mongoose.Types.ObjectId.isValid(id), {
+  categoryIds: z
+    .array(
+      z.string().refine((id) => mongoose.Types.ObjectId.isValid(id), {
         message: "Invalid category ID",
       })
-  ).optional(),
+    ),
   imgUrl: z.string().url().optional(),
   tags: z.array(z.string()).optional(),
-  status: z.enum([ "draft", "pending", "published", "rejected"]).optional(),
+  status: z.enum(["draft", "pending", "published", "rejected"]).optional(),
   rejectionReason: z.string().optional(),
-  publishedAt: z.date().optional()
-})
+  publishedAt: z.date().optional(),
+});
 
 export type CreateNoteData = z.infer<typeof noteSchema>;
-export type UpdateNoteData = z.infer<typeof updateSchema>
+export type UpdateNoteData = z.infer<typeof updateSchema>;
 
 export class NoteService {
-  async createNote(data: CreateNoteData): Promise<NoteDocument> {
+  async createNote(
+    data: CreateNoteData,
+    author: AuthorDocument
+  ): Promise<NoteDocument> {
     const parsedData = noteSchema.safeParse(data);
     if (!parsedData.success) {
       throw new BadRequestError(
@@ -53,33 +54,39 @@ export class NoteService {
     }
     const validatedData = parsedData.data;
 
-    const { title, content, authorId, categoryIds, imgUrl, tags } =
+    const { title, content,imgUrl, tags,categoryIds } =
       validatedData;
 
     try {
       const newNote = new Note({
         title,
         content,
-        author: authorId,
+        author: author._id,
         status: "draft",
-        category: categoryIds,
+        category: categoryIds ||null,
         imgUrl,
         tags,
       });
 
       const savedNote = await newNote.save();
+      
+      if(savedNote.status === "published"){
+        
+        author.numberOfPublications = (author.numberOfPublications || 0) + 1;
+      await author.save();
+    }
       return savedNote;
     } catch (error: unknown) {
       if (error instanceof mongoose.Error.ValidationError) {
         throw new BadRequestError(`Validation error: ${error.message}`);
       }
-      throw new InternalServerError
-      (
+      throw new InternalServerError(
         `Failed to create note: ${
           error instanceof Error ? error.message : String(error)
         }`
       );
     }
+    
   }
 
   async getAllNotes(): Promise<NoteDocument[]> {
@@ -105,7 +112,7 @@ export class NoteService {
   }
 
   async getNoteById(id: Types.ObjectId): Promise<NoteDocument | null> {
-    try{
+    try {
       const note = await Note.findById(id)
         .populate({
           path: "author",
@@ -128,7 +135,7 @@ export class NoteService {
         throw new NotFoundError("Note not found");
       }
       return note;
-    }catch (error: unknown) {
+    } catch (error: unknown) {
       if (error instanceof mongoose.Error.CastError) {
         throw new BadRequestError("Invalid Note ID");
       }
@@ -144,16 +151,17 @@ export class NoteService {
     id: Types.ObjectId,
     data: UpdateNoteData
   ): Promise<NoteDocument | null> {
-    
     if (!mongoose.Types.ObjectId.isValid(id)) {
       throw new BadRequestError("Invalid Note id");
     }
 
-    const parsedData = updateSchema.safeParse(data)
-    if(!parsedData.success){
-      throw new BadRequestError("Invalid update data: " + parsedData.error.message)
+    const parsedData = updateSchema.safeParse(data);
+    if (!parsedData.success) {
+      throw new BadRequestError(
+        "Invalid update data: " + parsedData.error.message
+      );
     }
-    const validatedData = parsedData.data
+    const validatedData = parsedData.data;
     try {
       const updatedNote = await Note.findByIdAndUpdate(
         id,
@@ -178,13 +186,15 @@ export class NoteService {
       if (error instanceof mongoose.Error.ValidationError) {
         throw new BadRequestError(`Validation error: ${error.message}`);
       }
-      throw new InternalServerError(`: ${error instanceof Error ? error.message : String(error)}`);
+      throw new InternalServerError(
+        `: ${error instanceof Error ? error.message : String(error)}`
+      );
     }
   }
 
   async deleteNote(id: Types.ObjectId): Promise<NoteDocument | null> {
     if (!mongoose.Types.ObjectId.isValid(id)) {
-      throw new Error("Invalid Note ID");
+      throw new BadRequestError("Invalid Note ID");
     }
     try {
       return await Note.findByIdAndDelete(id);

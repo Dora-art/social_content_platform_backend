@@ -7,12 +7,15 @@ dotenv.config();
 import connectDb from "./config/server";
 
 connectDb();
-import userRoute from "./routes/userRoutes"
+import userRoutes from "./routes/userRoutes"
+import noteRoutes from "./routes/noteRoutes"
+
 const app = express();
 app.use(express.json());
 app.use(cors());
 
-app.use("/api", userRoute)
+app.use("/api", userRoutes)
+app.use("/api", noteRoutes)
 app.use(notFoundHandler)
 app.use(errorHandler)
 const PORT = process.env.PORT || 5000;
