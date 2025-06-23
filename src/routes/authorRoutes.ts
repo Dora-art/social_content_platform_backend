@@ -7,3 +7,5 @@ const authorController = new AuthorController()
 
 router.get("/author", authorController.getAuthorById)
 router.get("/authors", authorController.getAllAuthors)
+
+export default router

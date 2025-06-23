@@ -14,6 +14,7 @@ const categorySchema: Schema<CategoryDocument> = new Schema({
   },
   desc: {
     type: String,
+    required: true,
     trim: true,
   },
 });

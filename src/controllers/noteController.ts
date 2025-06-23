@@ -1,11 +1,13 @@
 import { Request, Response, NextFunction } from "express";
-import { CreateNoteData, NoteService, UpdateNoteData } from "../services/noteService";
-import mongoose  from "mongoose";
-import { AuthenticationError, BadRequestError} from "../utils/error";
+import {
+  CreateNoteData,
+  NoteService,
+} from "../services/noteService";
+import mongoose from "mongoose";
+import { BadRequestError } from "../utils/error";
 import { UserDocument } from "../models/User";
 import { Author, AuthorDocument } from "../models/Author";
 import { AuthorService } from "../services/authorService";
-
 
 
 const noteService = new NoteService();
@@ -18,108 +20,165 @@ export class NoteController {
     next: NextFunction
   ): Promise<void> {
     try {
-      if(!req.user){
-        return next(new AuthenticationError("User is not authenticated"))
-      }
-      const {...noteData} = req.body
-      const user = req.user as UserDocument
+      const user = req.user as UserDocument;
 
-      let author: AuthorDocument | null = await Author.findOne({user: user._id})
-      if(!author){
-        const {authorName, authorBio} = req.body
-        const name = authorName || user.username 
-        const bio = authorBio || ""
-        author = await authorService.createAuthorService(name, user._id.toString(), bio)
+      let author: AuthorDocument | null = await Author.findOne({
+        user: user._id,
+      });
+      if (!author) {
+        const name = user.username;
+        const bio = user.bio || "";
+        author = await authorService.createAuthorService(
+          name,
+          user._id.toString(),
+          bio
+        );
       }
-
+const { ...noteData } = req.body;
       const createNoteData: CreateNoteData = {
         ...noteData,
+      };
+      const note = await noteService.createNote(createNoteData, author);
+      res.status(201).json(note);
+    } catch (err) {
+      next(err);
+    }
+  }
 
-         categoryIds: noteData.categoryIds || []
+  async getPublicNotes(
+    req: Request,
+    res: Response,
+    next: NextFunction
+  ): Promise<void> {
+    try {
+      const notes = await noteService.getPublicNotes();
+      res.status(200).json(notes);
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  async getPublicNote(
+    req: Request,
+    res: Response,
+    next: NextFunction
+  ): Promise<void> {
+    try {
+    const { id } = req.params;
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return next(new BadRequestError("Invalid note ID format"));
+    }
+    
+      const note = await noteService.getPublicNoteById(id);
+      res.status(200).json(note);
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  async getNotesByAuthor( req: Request,
+    res: Response,
+    next: NextFunction): Promise<void>{try{
+      const user = req.user as UserDocument
+      const author: AuthorDocument | null = await Author.findOne({user: user._id})
+      if(!author){
+        res.status(200).json([])
+        return
       }
-      const note = await noteService.createNote(createNoteData, author)
-      res.status(200).json(note)
+      const notesByAuthor = await noteService.getNotesByAuthor(author._id.toString())
+      res.status(200).json(notesByAuthor)
+    }catch(err){
+      next(err)
+    }
+}
+
+async getAllNotesForAdmin(req: Request,
+    res: Response,
+    next: NextFunction): Promise<void>{try{
+      const notes = await noteService.getNotesForAdmin()
+      res.status(200).json(notes)
+}catch(err){
+  next(err)
+}
+    }
+  async getNotesByCategory(req: Request, res: Response, next: NextFunction): Promise<void>{
+try {
+
+  const {categoryId} = req.params
+  if(!mongoose.Types.ObjectId.isValid(categoryId)){
+    return next(new BadRequestError("Invalid category ID format") )
+  }
+  const notesByCategory = await noteService.getNotesByCategoryId(categoryId)
+  res.status(200).json(notesByCategory)
+}catch(err){
+  next(err)
+}
+  }
+
+  async updateNoteUser(req: Request,
+    res: Response,
+    next: NextFunction): Promise<void>{
+       try {
+    const { id } = req.params;
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return next(new BadRequestError("Invalid note ID format"));
+    }
+
+    const updateData = req.body
+  
+    if(updateData.noteStatus && updateData.noteStatus !== "draft"){
+      return next("Notes can only be set to draft for users")
+    }
+    const updatedNote = await noteService.updateNote(id, updateData)
+    res.status(200).json(updatedNote)
     }catch(err){
       next(err)
     }
   }
 
-  async getNotes(req: Request, res: Response, next: NextFunction): Promise<void>{
-    try{
-        const notes = await noteService.getAllNotes()
-    res.status(200).json(notes)
-    }catch(err){
-    next(err)
+    
+
+  async updateNoteAdmin(
+    req: Request,
+    res: Response,
+    next: NextFunction
+  ): Promise<void> {
+       try {
+    const { id } = req.params;
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return next(new BadRequestError("Invalid note ID format"));
+    }
+
+    const UpdateNoteData = req.body
+      const updatedNote = await noteService.updateNote(
+        id,
+      UpdateNoteData,true
+      );
+      res.status(200).json(updatedNote);
+    } catch (err) {
+      next(err);
     }
   }
 
-  async getNote(req: Request, res: Response, next: NextFunction): Promise<void>{
-    const {id} = req.params
-    if(!mongoose.Types.ObjectId.isValid(id)){
-return next(new BadRequestError("Invalid note ID format"))
+  async deleteNote(
+    req: Request,
+    res: Response,
+    next: NextFunction
+  ): Promise<void> {
+    const { id } = req.params;
+
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return next(new BadRequestError("Invalid note ID format"));
     }
-    try{
-        const note = await noteService.getNoteById(new mongoose.Types.ObjectId(id));
-        res.status(200).json(note)
-    }catch(err){
-        next(err)
+    try {
+      const existingNote = await noteService.deleteNote(
+       id);
+      if (!existingNote) {
+        return next(new BadRequestError("Note not found"));
+      }
+      res.status(204).send();
+    } catch (err) {
+      next(err);
     }
   }
-
-  async updateNote(req: Request, res:Response, next: NextFunction): Promise<void>{
-const {id} = req.params
-
-if(!req.user){
-  return next(new AuthenticationError("User is not authenticated"))
 }
-if(!mongoose.Types.ObjectId.isValid(id)){
-  return next(new BadRequestError("Invalid note ID format"))
-}
-try{
-  const existingNote = await noteService.getNoteById(new mongoose.Types.ObjectId(id)) 
-  if(!existingNote){
-    return next(new BadRequestError("Note not found"))
-  }
-
-const user = req.user as UserDocument
-const author = await Author.findOne({user: user._id})
-if(!author || !existingNote.author.equals(author._id as mongoose.Types.ObjectId)){
-  return next(new AuthenticationError("You are not allowed to access this route"))
-}
-
-  const note = await noteService.updateNoteById(new mongoose.Types.ObjectId(id), req.body as UpdateNoteData
-)
-res.status(200).json(note)
-}catch(err){
-  next(err)
-}
-  }
-
-  async deleteNote(req: Request, res: Response, next: NextFunction): Promise<void>{
-const {id} = req.params
-
-if(!req.user){
-  return next(new AuthenticationError("User is not authenticated"))
-}
-if(!mongoose.Types.ObjectId.isValid(id)){
-  return next(new BadRequestError("Invalid note ID format"))
-}
-try{
-  const existingNote = await noteService.getNoteById(new mongoose.Types.ObjectId(id))
-  if(!existingNote){
-    return next(new BadRequestError("Note not found"))
-  }
-
-  const user = req.user as UserDocument
-  const author = await Author.findOne({user: user._id})
-  if(!author || !existingNote.author.equals(author._id as mongoose.Types.ObjectId)){
-    return next(new AuthenticationError("User can not access this route"))
-  }
-  await noteService.deleteNote(new mongoose.Types.ObjectId(id))
-  res.status(204).send()
-}catch(err){
-  next(err)
-}
-  }
-}
-   

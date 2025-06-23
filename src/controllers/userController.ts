@@ -5,6 +5,8 @@ import {
   UserLoginData,
   updateUserData,
 } from "../services/userService";
+import mongoose from "mongoose";
+import { BadRequestError } from "../utils/error";
 
 const userService = new UserService();
 
@@ -12,10 +14,12 @@ export class UserController {
   async registerUser(req: Request, res: Response, next: NextFunction) {
     try {
       const result = await userService.signupUser(req.body as UserSignupData);
-      res.status(200).json({
+      res.status(201).json({
         message: "User successfully created",
-        token: result.token,
-        user: result,
+         data: {
+          user: result.user,
+          token: result.token
+        }
       });
     } catch (err) {
       next(err);
@@ -24,8 +28,15 @@ export class UserController {
 
   async login(req: Request, res: Response, next: NextFunction) {
     try {
-      const user = await userService.loginUser(req.body as UserLoginData);
-      res.json(user);
+      const result = await userService.loginUser(req.body as UserLoginData);
+      res.status(200).json({
+        success:true,
+        message: "Login successful",
+        data: {
+          user: result.user,
+          token: result.token
+        }
+      })
     } catch (err) {
       next(err);
     }
@@ -33,6 +44,9 @@ export class UserController {
 
   async getUser(req: Request, res: Response, next: NextFunction) {
     try {
+       if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
+            throw new BadRequestError("Invalid User ID");
+          }
       const user = await userService.getUser(req.params.id);
       res.status(200).json(user);
     } catch (err) {
@@ -51,6 +65,9 @@ export class UserController {
 
   async updateUser(req: Request, res: Response, next: NextFunction) {
     try {
+      if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
+      throw new BadRequestError("Invalid User ID");
+    }
       const user = await userService.updateUserInfo(
         req.params.id,
         req.body as updateUserData
@@ -63,6 +80,9 @@ export class UserController {
 
   async deleteUser(req: Request, res: Response, next: NextFunction) {
     try {
+      if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
+            throw new BadRequestError("Invalid User ID.");
+          }
       const result = await userService.deleteUser(req.params.id);
       res.json(result);
     } catch (err) {

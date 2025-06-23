@@ -1,15 +1,17 @@
-import mongoose from "mongoose";
-import User, { UserDocument } from "../models/User"; // Your Mongoose User model
-import { generateToken } from "../auth/jwt";
+import User, { UserDocument } from "../models/User";
+import logger from "../config/logger";
+import { generateToken } from "../middleware/auth/jwt";
 import { hashPassword, matchPassword } from "../utils/password";
 import { sanitizeFields } from "../utils/security";
 import { z } from "zod";
-import { BadRequestError } from "../utils/error";
+import { BadRequestError, NotFoundError } from "../utils/error";
+import { UserRole } from "../middleware/authorizationMiddleware";
 
 export interface UserSignupData {
   username: string;
   password: string;
   email: string;
+  role?: UserRole;
 }
 
 export interface UserLoginData {
@@ -30,6 +32,7 @@ const bodySchema = z.object({
   username: z.string().trim().min(1),
   email: z.string().trim().email(),
   password: z.string().trim().min(6),
+  role: z.nativeEnum(UserRole).optional(),
 });
 
 const updateSchema = z.object({
@@ -38,7 +41,7 @@ const updateSchema = z.object({
 });
 
 export class UserService {
-  async signupUser(data: UserSignupData): Promise<Partial<UserDocument>> {
+  async signupUser(data: UserSignupData): Promise<{user:Partial<UserDocument>, token: string}> {
     const parsedBody = bodySchema.safeParse(data);
     if (!parsedBody.success) {
       throw new BadRequestError(
@@ -46,11 +49,11 @@ export class UserService {
       );
     }
     const body = parsedBody.data;
-    const { username, email, password } = body;
+    const { username, email, password, role } = body;
 
     const existing = await User.findOne({ email });
     if (existing) {
-      throw new Error("User already exists");
+      throw new BadRequestError("User with this email already exists");
     }
 
     const hashedPassword = await hashPassword(password);
@@ -59,41 +62,52 @@ export class UserService {
       username: username,
       email: email,
       password: hashedPassword,
+      role: role || UserRole.USER,
       blogs: [],
     });
 
     const savedUser = await user.save();
-    
-     const token = generateToken({userId: savedUser._id.toString()});
-    savedUser.token = token;
-    await savedUser.save();
 
-    return sanitizeFields(savedUser.toObject());
+    const token = generateToken({ userId: savedUser._id.toString(), username: user.username,
+      email: user.email,
+      role: user.role });
+    
+    return {
+      user: sanitizeFields(savedUser.toObject()),
+      token: token
+    }
   }
 
-  async loginUser(data: UserLoginData): Promise<Partial<UserDocument>> {
-    if (!data.email) throw new Error("Email must be provided");
-    if (!data.password) throw new Error("Password must be provided");
+  async loginUser(
+    data: UserLoginData
+  ): Promise<{ user: Partial<UserDocument>; token: string }> {
+    if (!data.email) throw new BadRequestError("Email must be provided");
+    if (!data.password) throw new BadRequestError("Password must be provided");
 
     const user = await User.findOne({ email: data.email });
     if (!user) {
-      throw new Error("User does not exist");
+      throw new BadRequestError("Invalid credentials");
     }
 
     const match = await matchPassword(data.password, user.password);
-    if (!match) throw new Error("Wrong password entered");
+    if (!match) throw new BadRequestError("Invalid credentials");
 
-    user.token = generateToken({userId: user._id.toString()});
-    await user.save();
-    return sanitizeFields(user.toObject());
+    const token = generateToken({
+      userId: user._id.toString(),
+      username: user.username,
+      email: user.email,
+      role: user.role
+    });
+
+    return {
+      user: sanitizeFields(user.toObject()),
+      token: token,
+    };
   }
 
   async getUser(id: string): Promise<Partial<UserDocument>> {
-    if (!mongoose.Types.ObjectId.isValid(id)) {
-      throw new Error("Invalid User ID");
-    }
     const user = await User.findById(id);
-    if (!user) throw new Error("User does not exist");
+    if (!user) throw new NotFoundError("User does not exist");
 
     return sanitizeFields(user.toObject());
   }
@@ -102,9 +116,12 @@ export class UserService {
     try {
       const users = await User.find({});
       return users.map((user) => sanitizeFields(user.toObject()));
-    } catch (error) {
-      console.error("Error in getAllUsersService: ", error);
-      throw new Error("Failed to retrieve users"); // More generic error
+    } catch (error: unknown) {
+      logger.error("Error in getAllUsersService: ", {
+        originalErrorDetails: error,
+        serviceMethod: "getAllUsers",
+      });
+      throw error;
     }
   }
 
@@ -112,17 +129,16 @@ export class UserService {
     id: string,
     data: Partial<updateUserData>
   ): Promise<Partial<UserDocument>> {
-    if (!mongoose.Types.ObjectId.isValid(id)) {
-      throw new Error("Invalid User ID");
-    }
     const parsedData = updateSchema.safeParse(data);
     if (!parsedData.success) {
-      throw new Error("Invalid update data: " + parsedData.error.message);
+      throw new BadRequestError(
+        "Invalid update data: " + parsedData.error.message
+      );
     }
 
     const updateFields = parsedData.data;
     const user = await User.findById(id);
-    if (!user) throw new Error("No user found");
+    if (!user) throw new NotFoundError("No user found");
 
     if (updateFields.username) {
       user.username = updateFields.username;
@@ -131,9 +147,12 @@ export class UserService {
     if (updateFields.password) {
       try {
         user.password = await hashPassword(updateFields.password);
-      } catch (error) {
-        console.error("Password hashing failed:", error);
-        throw new Error("Failed to hash password");
+      } catch (error: unknown) {
+        logger.error("Password hashing failed during user update:", {
+          originalErrorDetails: error,
+          operation: "hashPassword",
+        });
+        throw error;
       }
     }
     const updatedUser = await user.save();
@@ -141,12 +160,9 @@ export class UserService {
   }
 
   async deleteUser(id: string): Promise<DeleteUserResponse> {
-    if (!mongoose.Types.ObjectId.isValid(id)) {
-      throw new Error("Invalid User ID.");
-    }
     const user = await User.findByIdAndDelete(id);
     if (!user) {
-      throw new Error("User not found");
+      throw new NotFoundError("User not found");
     }
 
     return { message: "User successfully deleted" };

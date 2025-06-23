@@ -31,6 +31,14 @@ export class NotFoundError extends CustomError {
       Object.setPrototypeOf(this, NotFoundError.prototype);
     }
   }
+
+  export class ForbiddenError extends CustomError {
+ constructor(message: string){
+  super(message, 403);
+  this.name = "ForbiddenError"
+  Object.setPrototypeOf(this, ForbiddenError.prototype);
+ }
+  }
   
   export class AuthenticationError extends CustomError {
     constructor(message: string) {

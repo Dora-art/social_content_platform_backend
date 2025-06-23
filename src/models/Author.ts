@@ -2,6 +2,7 @@ import mongoose, { Types, Schema, Document } from "mongoose";
 import { UserDocument } from "./User";
 
 export interface AuthorDocument extends Document {
+  _id: Types.ObjectId,
   name: string;
   user: Types.ObjectId | UserDocument;
   bio: string;

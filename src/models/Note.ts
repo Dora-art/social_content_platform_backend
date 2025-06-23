@@ -1,14 +1,14 @@
-import mongoose, { Types, Schema, Document } from "mongoose";
+import mongoose, { Schema, Document } from "mongoose";
 
 export interface NoteDocument extends Document {
   title: string;
   imgUrl?: string;
   content: string;
-  author: Types.ObjectId;
-  status: "draft" | "pending" | "published" | "rejected";
-  likes: Types.ObjectId[];
-  saves: Types.ObjectId[];
-  category?: Types.ObjectId[];
+  author: mongoose.Types.ObjectId;
+  noteStatus: "draft" | "pending" | "published" | "rejected";
+  likes: mongoose.Types.ObjectId[];
+  saves: mongoose.Types.ObjectId[];
+  categories: mongoose.Types.ObjectId[];
   createdAt: Date;
   updateAt: Date;
   rejectionReason?: string;
@@ -21,6 +21,7 @@ const noteSchema: Schema<NoteDocument> = new Schema(
     title: {
       type: String,
       required: true,
+      trim: true
     },
     imgUrl: {
       type: String,
@@ -31,18 +32,18 @@ const noteSchema: Schema<NoteDocument> = new Schema(
       required: true,
     },
     author: {
-      type: mongoose.Schema.Types.ObjectId,
+      type: Schema.Types.ObjectId,
       ref: "Author",
       required: true,
     },
 
-    status: {
+    noteStatus: {
       type: String,
       enum: ["draft", "pending", "published", "rejected"],
       default: "draft",
       required: true,
     },
-    category: [
+    categories: [
       {
         type: Schema.Types.ObjectId,
         ref: "Category",
@@ -70,7 +71,9 @@ const noteSchema: Schema<NoteDocument> = new Schema(
 
     publishedAt: {
       type: Date,
-      required: true,
+      required: function(){
+        return this.noteStatus === "published"
+      },
     },
   },
   { timestamps: true }
